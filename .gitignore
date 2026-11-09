@@ -1,0 +1,4 @@
+node_modules
+dist
+# Private reference screenshots (real people's photos) — never publish.
+sample/

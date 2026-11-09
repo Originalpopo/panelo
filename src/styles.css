@@ -1,0 +1,212 @@
+/* Black theme: the photos are the only colour on screen. */
+:root {
+  --bg: #000000;
+  --ink: #f2f2f2;
+  --ink-soft: #8a8a8a;
+  --bar: #000000;
+  --sheet: #141414;
+  --bar-ink: #f2f2f2;
+  --bar-soft: #8a8a8a;
+  --raised: #1e1e1e;
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #ffffff;
+  --accent-ink: #000000;
+  --empty: #2a2a2a;
+  --empty-ink: #6a6a6a;
+  --select: #ffb020;
+  --swap: #3ac7b5;
+  --active: #d98200; /* the orange of the chosen sub-menu item */
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:disabled { opacity: 0.35; cursor: default; }
+
+/* ---------- home ---------- */
+.home {
+  height: 100dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+.brand h1 { margin: 10px 0 2px; font-size: 32px; letter-spacing: 0.5px; }
+.brand p { margin: 0; color: var(--ink-soft); }
+.small { color: var(--ink-soft); font-size: 13px; max-width: 300px; margin: 0; }
+
+.primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent); color: var(--accent-ink);
+  font-weight: 600; border-radius: 14px; padding: 12px 20px; text-decoration: none;
+}
+.primary.big { font-size: 18px; padding: 16px 32px; min-width: 220px; }
+.primary.disabled { opacity: 0.4; pointer-events: none; }
+
+/* ---------- editor ---------- */
+.editor {
+  height: 100dvh;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+.top {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 52px; padding: 0 8px; flex: none;
+}
+.undo { display: flex; gap: 4px; }
+.icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; }
+.icon.accent { background: var(--accent); color: var(--accent-ink); width: 44px; height: 38px; }
+
+.stage { flex: 1; min-height: 0; display: grid; place-items: center; touch-action: none; position: relative; }
+.frame { position: relative; overflow: hidden; touch-action: none; }
+.cell { position: absolute; overflow: hidden; background: var(--empty); }
+.cell img {
+  position: absolute; max-width: none; pointer-events: none;
+  -webkit-user-drag: none; -webkit-touch-callout: none;
+}
+.cell .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--empty-ink); }
+/* Overlays sit above the (absolutely placed) photo, so the marks stay visible. */
+.cell.selected::after, .cell.second::after, .cell.swap-from::after, .cell.swap-target::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+}
+.cell.selected::after { box-shadow: inset 0 0 0 3px var(--select); }
+.cell.second::after { border: 3px dashed var(--select); background: rgba(0, 0, 0, 0.35); }
+.cell.swap-from::after { border: 3px dashed var(--swap); }
+.cell.swap-target::after { background: rgba(58, 167, 160, 0.18); }
+.divider { position: absolute; z-index: 2; display: grid; place-items: center; touch-action: none; }
+.divider .pill { background: var(--active); border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 4px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+.divider.v .pill { width: 6px; height: min(28px, 60%); }
+.divider.h .pill { height: 6px; width: min(28px, 60%); }
+
+.toast {
+  position: fixed; top: calc(60px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  background: var(--bar); color: var(--bar-ink); padding: 8px 14px; border-radius: 20px; font-size: 13px; z-index: 20;
+}
+
+/* ---------- tool panel ---------- */
+.tools { flex: none; background: var(--bar); color: var(--bar-ink); }
+.panel { padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; gap: 4px; justify-content: space-around; }
+.tool {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 2px; border-radius: 12px; font-size: 12px; line-height: 1.2;
+}
+.lbl-ic { display: inline-flex; align-items: center; gap: 2px; }
+.tool:active:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.hint { font-size: 12px; color: var(--bar-soft); text-align: center; line-height: 1.5; }
+.hint.strong { font-size: 15px; color: var(--bar-ink); padding: 16px 0 4px; }
+
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px;
+}
+.chip i { display: inline-block; border: 1.5px solid currentColor; border-radius: 2px; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.strip::-webkit-scrollbar { display: none; }
+.thumb { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; position: relative; border: 2px solid transparent; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb.used img { opacity: 0.55; }
+.thumb.on { border-color: var(--select); }
+.thumb.on img { opacity: 1; }
+.thumb.add { display: grid; place-items: center; border: 1.5px dashed rgba(255, 255, 255, 0.35); }
+.lthumb { flex: none; width: 66px; height: 66px; display: grid; place-items: center; border-radius: 10px; background: var(--raised); }
+.lthumb.on { outline: 2px solid var(--select); outline-offset: -2px; }
+.strip.layouts .thumb.add { width: 66px; height: 66px; }
+
+
+/* Border controls: one row, two sliders side by side. */
+.panel.border { min-height: 0; padding: 10px 12px; }
+.sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.slider { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.slider .lbl { color: var(--bar-soft); flex: none; }
+.slider input { flex: 1; min-width: 0; accent-color: var(--select); height: 28px; }
+
+.colors { display: flex; flex-direction: column; gap: 6px; }
+.cap { font-size: 12px; color: var(--bar-soft); display: flex; justify-content: space-between; align-items: center; }
+.custom { display: inline-flex; align-items: center; gap: 6px; color: var(--bar-ink); font-size: 13px; }
+.custom input { width: 30px; height: 26px; border: 0; padding: 0; background: none; border-radius: 6px; }
+.swatches { display: flex; gap: 4px; flex-wrap: wrap; }
+.swatches.grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.sw { height: 26px; min-width: 26px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.15); }
+.sw.on { outline: 2px solid var(--select); outline-offset: 1px; }
+
+/* ---------- main menu ----------
+   Closed: LAYOUT | BORDER. Opening one slides it to the left edge, pushes the other off screen,
+   and slides its white sub-menu in from the right. */
+.menu {
+  position: relative; flex: none; overflow: hidden; background: var(--bar);
+  height: calc(52px + env(safe-area-inset-bottom));
+}
+.menu .main {
+  position: absolute; top: 0; height: 52px; width: 50%;
+  font-weight: 700; letter-spacing: 0.5px; color: var(--bar-ink);
+  transition: left 0.3s ease, width 0.3s ease;
+}
+.menu .m-layout { left: 0; }
+.menu .m-border { left: 50%; }
+.menu.open-layout .m-layout { width: 30%; }
+.menu.open-layout .m-border { left: 100%; }
+.menu.open-border .m-border { left: 0; width: 30%; }
+.menu.open-border .m-layout { left: -50%; }
+.menu .subs {
+  position: absolute; top: 0; left: 30%; right: 0; height: 52px;
+  display: flex; background: #ffffff;
+  transform: translateX(105%); transition: transform 0.3s ease;
+}
+.menu.open-layout .s-layout, .menu.open-border .s-border { transform: none; }
+.menu .subs button { flex: 1 1 auto; padding: 0 4px; color: #000000; font-size: 15px; font-weight: 500; }
+.menu .subs button.on { color: var(--active); font-weight: 700; }
+
+/* ---------- sheets ---------- */
+.sheet-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: flex-end; z-index: 30; }
+.sheet {
+  width: 100%; max-height: 86dvh; overflow-y: auto; background: var(--sheet); color: var(--bar-ink);
+  border-radius: 18px 18px 0 0; padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.sheet-head b { font-size: 17px; }
+.pthumb { position: relative; background: #3a3a3a; border-radius: 3px; }
+.pthumb i { position: absolute; background: #d0d0d0; }
+
+.export .preview { display: grid; place-items: center; min-height: 200px; background: rgba(255, 255, 255, 0.04); border-radius: 12px; padding: 10px; }
+.export .preview img { max-width: 100%; max-height: 44dvh; display: block; -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto; }
+.export .busy { color: var(--bar-soft); }
+.meta { font-size: 12px; color: var(--bar-soft); text-align: center; }
+.err { font-size: 13px; color: #ffb4a8; text-align: center; }
+
+@media (min-width: 700px) {
+  .editor, .home { max-width: 560px; margin: 0 auto; }
+  .sheet { max-width: 560px; margin: 0 auto; }
+}
+
+/* Floating toolbar over a tapped photo (layout › add). */
+.frame-wrap { position: relative; }
+.cell-bar {
+  position: absolute; z-index: 5; display: flex; align-items: center; justify-content: space-around;
+  background: #ffffff; color: #000000; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.cell-bar button { width: 44px; height: 40px; display: grid; place-items: center; border-radius: 10px; }
+.cell-bar button:active { background: rgba(0, 0, 0, 0.08); }
+
+/* Long-press: the photo lifts up and follows the finger; the cell under it shows where it will swap. */
+.cell.lifted {
+  z-index: 6; pointer-events: none;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6) !important;
+  animation: lift-pop 0.16s ease-out;
+}
+@keyframes lift-pop { from { transform: scale(1); } }

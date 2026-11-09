@@ -4,6 +4,8 @@ import { useStore } from '../store.ts';
 import { renderFrame } from '../exporter.ts';
 import { frameSize } from '../geometry.ts';
 
+const DONE_MS = 1300;
+
 const SIZES = [
   { side: 2048, label: 'Standard' },
   { side: 3000, label: 'High' },
@@ -40,10 +42,20 @@ export default function ExportSheet({ onClose }: { onClose: () => void }) {
 
   const canShare = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
 
+  /** Success tick shown after the share sheet finishes (or the download starts); then the sheet closes. */
+  const [done, setDone] = useState(false);
+  const finish = () => {
+    setDone(true);
+    window.setTimeout(onClose, DONE_MS);
+  };
+
   const share = async () => {
     if (!file) return;
     try {
+      // Resolves only when the person completed an action in the iPhone share sheet (e.g. Save Image);
+      // closing the sheet without choosing rejects with AbortError, so no tick then.
       await navigator.share({ files: [file] });
+      finish();
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setErr('Sharing failed. Long-press the image and choose "Save to Photos" instead.');
     }
@@ -77,9 +89,18 @@ export default function ExportSheet({ onClose }: { onClose: () => void }) {
             <Share size={20} /> Share / Save to Photos
           </button>
         ) : (
-          <a className={`primary ${file ? '' : 'disabled'}`} href={url ?? undefined} download={file?.name}>
+          <a className={`primary ${file ? '' : 'disabled'}`} href={url ?? undefined} download={file?.name} onClick={() => file && finish()}>
             <Download size={20} /> Download
           </a>
+        )}
+        {done && (
+          <div className="done" role="status">
+            <svg viewBox="0 0 52 52" width="76" height="76" aria-hidden="true">
+              <circle className="done-ring" cx="26" cy="26" r="23" />
+              <path className="done-tick" d="M15 27 l7 7 l15 -16" />
+            </svg>
+            <span>Done</span>
+          </div>
         )}
       </div>
     </div>

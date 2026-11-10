@@ -40,7 +40,10 @@ export default function ExportSheet({ onClose }: { onClose: () => void }) {
     };
   }, [doc, photos, side]);
 
-  const canShare = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+  // On a computer (main pointer is a mouse / trackpad) the file goes straight to the computer — no share window.
+  // On iPhone / iPad the share sheet is the way to "Save to Photos".
+  const isComputer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const canShare = !isComputer && !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
 
   /** Success tick shown after the share sheet finishes (or the download starts); then the sheet closes. */
   const [done, setDone] = useState(false);

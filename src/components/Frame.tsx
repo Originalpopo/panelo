@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, RotateCw, Images, Trash2 } from 'lucide-react';
+import { ImagePlus, RotateCw, Images, Trash2, Angle, TrianglesCenterlineDashedVertical } from 'lucide-react';
 import { useStore, emptyPlacement } from '../store.ts';
-import { TILT_MAX, clamp, computeLayout, photoPlace, slidePhoto, type DividerRect } from '../geometry.ts';
+import { clamp, computeLayout, photoPlace, slidePhoto, snapTilt, wrapDeg, type DividerRect } from '../geometry.ts';
 import { findNode, setSizes } from '../layout.ts';
 import { mergeCells } from '../merge.ts';
 import TextLayer from './TextLayer.tsx';
@@ -57,7 +57,7 @@ export default function Frame({
   }, []);
 
   const [rw, rh] = doc.ratio;
-  const pad = 16;
+  const pad = box.w >= 700 ? 32 : 16; // a little more air around the frame on iPad / computer
   const availW = Math.max(0, box.w - pad * 2);
   const availH = Math.max(0, box.h - pad * 2);
   const W = Math.floor(Math.min(availW, (availH * rw) / rh));
@@ -74,6 +74,9 @@ export default function Frame({
   /** The photo being carried for a swap: where the finger has moved it, and the cell under the finger. */
   const [lift, setLift] = useState<{ id: string; dx: number; dy: number; over: string | null } | null>(null);
   const stopLiftTimer = () => window.clearTimeout(liftTimer.current);
+  const [straighten, setStraighten] = useState(false);
+  const tiltTap = useRef(0); // when the tilt slider was last let go — two quick taps put it back to 0°
+  useEffect(() => setStraighten(false), [selected, photoTools]);
   /** merge: an orange dot shows how it's done each time merge opens, until the frame is touched. */
   const [mergeHint, setMergeHint] = useState(mergeMode);
   useEffect(() => setMergeHint(mergeMode), [mergeMode]);
@@ -81,9 +84,45 @@ export default function Frame({
   // Stop iOS from scrolling/zooming the page while working on the frame.
   useEffect(() => {
     const el = stageRef.current!;
-    const stop = (e: TouchEvent) => e.preventDefault();
+    // (a slider in the Cell bar still needs its own touch-drag)
+    const stop = (e: TouchEvent) => {
+      if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+    };
     el.addEventListener('touchmove', stop, { passive: false });
     return () => el.removeEventListener('touchmove', stop);
+  }, []);
+
+  // Computer (no two fingers): the mouse wheel / trackpad pinch zooms, and Shift + wheel turns —
+  // the picked photo (where photos can be zoomed), or the picked text in the TEXT menu.
+  const modes = useRef({ photoTools, textMode });
+  modes.current = { photoTools, textMode };
+  useEffect(() => {
+    const el = stageRef.current!;
+    const onWheel = (e: WheelEvent) => {
+      const s = useStore.getState();
+      const d = s.doc;
+      if (!d) return;
+      const turn = e.shiftKey || e.altKey;
+      const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX; // Shift + wheel comes as sideways scroll in some browsers
+      const scale = Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.0015)); // ctrl = trackpad pinch: small steps
+      const degrees = Math.round(delta * 0.02 * 2) / 2; // one wheel notch ≈ 2°
+      if (modes.current.textMode) {
+        const t = d.texts?.find((x) => x.id === s.textSel);
+        if (!t) return;
+        e.preventDefault();
+        if (turn) s.updateText(t.id, { rot: (((t.rot + degrees + 540) % 360) - 180) }, 'text:' + t.id);
+        else s.updateText(t.id, { size: clamp(t.size * scale, 20, 600) }, 'text:' + t.id);
+        return;
+      }
+      const id = s.selected;
+      const p = id ? d.cells[id] : undefined;
+      if (!modes.current.photoTools || !id || !p?.photoId) return;
+      e.preventDefault();
+      const next = turn ? { tilt: wrapDeg((p.tilt ?? 0) + degrees) } : { zoom: clamp(p.zoom * scale, 1, 6) };
+      s.commit((doc) => ({ ...doc, cells: { ...doc.cells, [id]: { ...doc.cells[id], ...next } } }), 'zoom:' + id);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
   const cellRect = (id: string) => layoutRef.current.cells.find((c) => c.id === id);
@@ -188,8 +227,7 @@ export default function Frame({
       // twist: the turn of the line between the two fingers since they landed (snaps to straight near 0)
       let turn = ((Math.atan2(p2.y - p1.y, p2.x - p1.x) - g.a0) * 180) / Math.PI;
       turn = ((turn + 540) % 360) - 180;
-      let tilt = clamp((g.start.tilt ?? 0) + turn, -TILT_MAX, TILT_MAX);
-      if (Math.abs(tilt) < 1.5) tilt = 0;
+      const tilt = snapTilt(wrapDeg((g.start.tilt ?? 0) + turn), 1.5); // all the way round; catches straight and quarter turns
       s.commit((d) => ({ ...d, cells: { ...d.cells, [g.cellId]: { ...d.cells[g.cellId], zoom, tilt } } }), 'zoom:' + g.cellId);
     } else if (g.mode === 'mergeDrag') {
       if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < TAP_SLOP) return;
@@ -288,7 +326,11 @@ export default function Frame({
   // Cell bar: floating toolbar over the tapped cell (every menu but merge): turn, replace / add, delete.
   const barCell = !mergeMode && !lift && selected && doc.cells[selected] ? layout.cells.find((c) => c.id === selected) : undefined;
   const barHasPhoto = !!(barCell && doc.cells[barCell.id]?.photoId);
-  const BAR_W = 156;
+  // Straighten: wherever the Cell bar shows, a photo can be tilted with a slider (-180° to 180°), with a grid over it.
+  const canTilt = barHasPhoto;
+  const straightening = straighten && canTilt;
+  const barTilt = barCell ? doc.cells[barCell.id]?.tilt ?? 0 : 0;
+  const BAR_W = straightening ? 300 : 252;
   const BAR_H = 46;
   const BAR_GAP = 6;
   // Above the photo if it fits inside the frame, else below it; only a photo as tall as the frame gets the bar on top of it.
@@ -322,7 +364,7 @@ export default function Frame({
           const p = doc.cells[c.id];
           const photo = p?.photoId ? photos[p.photoId] : undefined;
           const at = photo && p ? photoPlace({ x: 0, y: 0, w: c.w, h: c.h }, photo.w, photo.h, p) : null;
-          const cls = ['cell', selected === c.id && 'selected', (second === c.id || doomed.includes(c.id)) && 'second', lift?.id === c.id && 'lifted', lift?.over === c.id && 'swap-target']
+          const cls = ['cell', selected === c.id && 'selected', (second === c.id || doomed.includes(c.id)) && 'second', lift?.id === c.id && 'lifted', lift?.over === c.id && 'swap-target', straighten && selected === c.id && 'grid']
             .filter(Boolean)
             .join(' ');
           return (
@@ -344,7 +386,7 @@ export default function Frame({
                   src={photo.preview}
                   alt=""
                   draggable={false}
-                  style={{ left: at.cx - at.w / 2, top: at.cy - at.h / 2, width: at.w, height: at.h, transform: `rotate(${at.deg}deg)` }}
+                  style={{ left: at.cx - at.w / 2, top: at.cy - at.h / 2, width: at.w, height: at.h, transform: `rotate(${at.deg}deg)${p!.flip ? ' scaleX(-1)' : ''}` }}
                 />
               ) : (
                 <div className="empty">
@@ -404,32 +446,77 @@ export default function Frame({
             height: BAR_H,
           }}
         >
-          <button
-            aria-label="Rotate"
-            disabled={!barHasPhoto}
-            onClick={() =>
-              useStore.getState().commit((d) => ({
-                ...d,
-                cells: { ...d.cells, [barCell.id]: { ...d.cells[barCell.id], rot: ((d.cells[barCell.id].rot ?? 0) + 90) % 360 } },
-              }))
-            }
-          >
-            <RotateCw size={22} />
-          </button>
-          <button aria-label={barHasPhoto ? 'Replace photo' : 'Add photo'} onClick={() => onPickForCell(barCell.id)}>
-            <Images size={22} />
-          </button>
-          <button
-            aria-label={barHasPhoto ? 'Delete photo' : 'Delete cell'}
-            onClick={() => {
-              const s = useStore.getState();
-              // 1st delete: the photo goes, the empty cell stays (picked). 2nd delete: the cell goes.
-              if (barHasPhoto) s.commit((d) => ({ ...d, cells: { ...d.cells, [barCell.id]: emptyPlacement() } }));
-              else s.removeCellRelayout(barCell.id);
-            }}
-          >
-            <Trash2 size={22} />
-          </button>
+          {straightening ? (
+            <>
+              <button className="on" aria-label="Straighten" onClick={() => setStraighten(false)}>
+                <Angle size={22} />
+              </button>
+              <input
+                className="tilt"
+                type="range"
+                min={-180}
+                max={180}
+                step={0.5}
+                value={barTilt}
+                aria-label="Tilt"
+                onChange={(e) => {
+                  const tilt = snapTilt(Number(e.target.value), 1); // catches straight and quarter turns
+                  const id = barCell.id;
+                  useStore.getState().commit((d) => ({ ...d, cells: { ...d.cells, [id]: { ...d.cells[id], tilt } } }), 'zoom:' + id);
+                }}
+                onPointerUp={() => {
+                  const now = Date.now();
+                  if (now - tiltTap.current < DOUBLE_TAP_MS) {
+                    tiltTap.current = 0;
+                    const id = barCell.id;
+                    useStore.getState().commit((d) => ({ ...d, cells: { ...d.cells, [id]: { ...d.cells[id], tilt: 0 } } }), 'zoom:' + id);
+                  } else tiltTap.current = now;
+                }}
+              />
+              <span className="deg">{Math.round(barTilt)}°</span>
+            </>
+          ) : (
+            <>
+              <button
+                aria-label="Rotate"
+                disabled={!barHasPhoto}
+                onClick={() =>
+                  useStore.getState().commit((d) => ({
+                    ...d,
+                    cells: { ...d.cells, [barCell.id]: { ...d.cells[barCell.id], rot: ((d.cells[barCell.id].rot ?? 0) + 90) % 360 } },
+                  }))
+                }
+              >
+                <RotateCw size={22} />
+              </button>
+              <button aria-label="Straighten" disabled={!canTilt} onClick={() => setStraighten(true)}>
+                <Angle size={22} />
+              </button>
+              <button
+                aria-label="Flip"
+                disabled={!barHasPhoto}
+                onClick={() =>
+                  useStore.getState().commit((d) => ({ ...d, cells: { ...d.cells, [barCell.id]: { ...d.cells[barCell.id], flip: !d.cells[barCell.id].flip } } }))
+                }
+              >
+                <TrianglesCenterlineDashedVertical size={22} />
+              </button>
+              <button aria-label={barHasPhoto ? 'Replace photo' : 'Add photo'} onClick={() => onPickForCell(barCell.id)}>
+                <Images size={22} />
+              </button>
+              <button
+                aria-label={barHasPhoto ? 'Delete photo' : 'Delete cell'}
+                onClick={() => {
+                  const s = useStore.getState();
+                  // 1st delete: the photo goes, the empty cell stays (picked). 2nd delete: the cell goes.
+                  if (barHasPhoto) s.commit((d) => ({ ...d, cells: { ...d.cells, [barCell.id]: emptyPlacement() } }));
+                  else s.removeCellRelayout(barCell.id);
+                }}
+              >
+                <Trash2 size={22} />
+              </button>
+            </>
+          )}
         </div>
       )}
       </div>

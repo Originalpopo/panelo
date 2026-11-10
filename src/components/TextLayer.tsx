@@ -96,30 +96,86 @@ export default function TextLayer({ W, H, live }: { W: number; H: number; live: 
     up(e);
   };
 
+  // Handles on the picked text: the knob on top turns it, a corner dot sizes it (both with one finger or the mouse).
+  const handle = useRef<{ kind: 'turn' | 'size'; id: string; cx: number; cy: number; a0: number; d0: number; start: TextItem } | null>(null);
+  const handleDown = (e: React.PointerEvent, kind: 'turn' | 'size', t: TextItem) => {
+    e.stopPropagation();
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer already gone */
+    }
+    const box = (e.currentTarget as HTMLElement).closest('.text-item')!.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    handle.current = { kind, id: t.id, cx, cy, a0: Math.atan2(e.clientY - cy, e.clientX - cx), d0: Math.max(4, Math.hypot(e.clientX - cx, e.clientY - cy)), start: t };
+  };
+  const handleMove = (e: React.PointerEvent) => {
+    const h = handle.current;
+    if (!h) return;
+    const s = useStore.getState();
+    if (h.kind === 'turn') {
+      const turn = ((Math.atan2(e.clientY - h.cy, e.clientX - h.cx) - h.a0) * 180) / Math.PI;
+      let rot = ((h.start.rot + turn + 540) % 360) - 180;
+      rot = ((rot + 540) % 360) - 180;
+      if (Math.abs(rot) < 2) rot = 0; // snaps straight
+      s.updateText(h.id, { rot }, 'text:' + h.id);
+    } else {
+      const size = clamp((h.start.size * Math.hypot(e.clientX - h.cx, e.clientY - h.cy)) / h.d0, SIZE_MIN, SIZE_MAX);
+      s.updateText(h.id, { size }, 'text:' + h.id);
+    }
+  };
+  const handleUp = () => {
+    handle.current = null;
+  };
+  const handleProps = (kind: 'turn' | 'size', t: TextItem) => ({
+    onPointerDown: (e: React.PointerEvent) => handleDown(e, kind, t),
+    onPointerMove: handleMove,
+    onPointerUp: handleUp,
+    onPointerCancel: handleUp,
+  });
+
+  const place = (t: TextItem) => ({
+    left: t.x * W,
+    top: t.y * H,
+    fontSize: (t.size * short) / 1000,
+    transform: `translate(-50%, -50%) rotate(${t.rot}deg)`,
+  });
+  const picked = live ? texts.find((t) => t.id === sel) : undefined;
+
   if (!texts.length && !live) return null;
   return (
-    <div className={`texts ${live ? 'live' : ''}`}>
-      {live && <div className="text-catch" onPointerDown={(e) => down(e, null)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} />}
-      {texts.map((t) => (
-        <div
-          key={t.id}
-          className={`text-item ${live && sel === t.id ? 'on' : ''}`}
-          style={{
-            left: t.x * W,
-            top: t.y * H,
-            color: t.color,
-            opacity: t.opacity ?? 1,
-            fontSize: (t.size * short) / 1000,
-            transform: `translate(-50%, -50%) rotate(${t.rot}deg)`,
-          }}
-          onPointerDown={(e) => live && down(e, t)}
-          onPointerMove={move}
-          onPointerUp={up}
-          onPointerCancel={cancel}
-        >
-          {t.text}
+    <>
+      <div className={`texts ${live ? 'live' : ''}`}>
+        {live && <div className="text-catch" onPointerDown={(e) => down(e, null)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} />}
+        {texts.map((t) => (
+          <div
+            key={t.id}
+            className="text-item"
+            style={{ ...place(t), color: t.color, opacity: t.opacity ?? 1 }}
+            onPointerDown={(e) => live && down(e, t)}
+            onPointerMove={move}
+            onPointerUp={up}
+            onPointerCancel={cancel}
+          >
+            {t.text}
+          </div>
+        ))}
+      </div>
+      {/* The picked text's box and handles sit on an unclipped layer, so they stay reachable at the frame's edge.
+          The box is an invisible copy of the text, so it is exactly the text's size and turns with it. */}
+      {picked && (
+        <div className="text-handles">
+          <div className="text-item ghost" style={place(picked)}>
+            {picked.text}
+            <span className="stem" />
+            <span className="knob" {...handleProps('turn', picked)} aria-label="Turn" />
+            {(['tl', 'tr', 'bl', 'br'] as const).map((c) => (
+              <span key={c} className={`corner ${c}`} {...handleProps('size', picked)} />
+            ))}
+          </div>
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 }

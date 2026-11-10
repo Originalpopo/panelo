@@ -51,6 +51,7 @@ export async function renderFrame(doc: Doc, photos: Record<string, Photo>, longS
     const at = photoPlace(cell, photo.w, photo.h, p);
     ctx.translate(at.cx, at.cy);
     ctx.rotate(at.rad);
+    if (p.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, -at.w / 2, -at.h / 2, at.w, at.h);
     img.src = ''; // let the browser drop the decoded full-size photo before the next one
     ctx.restore();

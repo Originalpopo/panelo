@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gridFor, leaf, leafIds, presetsFor, removeCell, split, splitCell } from './layout.ts';
-import { computeLayout, frameSize, photoPlace, slidePhoto } from './geometry.ts';
+import { computeLayout, frameSize, photoPlace, slidePhoto, snapTilt, wrapDeg } from './geometry.ts';
 import type { FrameStyle } from './types.ts';
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -107,7 +107,7 @@ test('a tilted photo never leaves a gap in its cell, whatever the zoom, slide or
   for (let n = 0; n < 3000; n++) {
     const cell = cells[n % 3];
     const [pw, ph] = sizes[Math.floor(n / 3) % 3];
-    const p = { photoId: 'p', zoom: 1 + rnd() * 2, ox: rnd() * 2 - 1, oy: rnd() * 2 - 1, rot: 90 * Math.floor(rnd() * 4), tilt: rnd() * 90 - 45 };
+    const p = { photoId: 'p', zoom: 1 + rnd() * 2, ox: rnd() * 2 - 1, oy: rnd() * 2 - 1, rot: 90 * Math.floor(rnd() * 4), tilt: rnd() * 360 - 180, flip: rnd() < 0.5 };
     const at = photoPlace(cell, pw, ph, p);
     const cos = Math.cos(at.rad);
     const sin = Math.sin(at.rad);
@@ -118,4 +118,14 @@ test('a tilted photo never leaves a gap in its cell, whatever the zoom, slide or
       assert.ok(Math.abs(lx) <= at.w / 2 + 1e-6 && Math.abs(ly) <= at.h / 2 + 1e-6, `corner outside photo: ${JSON.stringify(p)}`);
     }
   }
+});
+
+test('tilt goes all the way round and snaps onto straight and quarter turns', () => {
+  assert.equal(wrapDeg(190), -170);
+  assert.equal(wrapDeg(-190), 170);
+  assert.equal(wrapDeg(540), -180);
+  assert.equal(snapTilt(89.2, 1.5), 90);
+  assert.equal(snapTilt(-0.8, 1.5), 0);
+  assert.equal(snapTilt(179.5, 1.5), -180);
+  assert.equal(snapTilt(45, 1.5), 45);
 });

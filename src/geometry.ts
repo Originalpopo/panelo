@@ -40,7 +40,13 @@ export function computeLayout(root: LayoutNode, W: number, H: number, style: Fra
   return { cells, dividers, k };
 }
 
-export const TILT_MAX = 45;
+/** Tilt goes all the way round: kept between -180° and 180°. */
+export const wrapDeg = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
+/** Near straight or a quarter turn, a tilt snaps onto it (within `by` degrees). */
+export const snapTilt = (d: number, by: number) => {
+  const q = Math.round(d / 90) * 90;
+  return Math.abs(d - q) < by ? wrapDeg(q) : d;
+};
 
 /**
  * Where to draw a photo: an image w×h, centred on (cx, cy), turned by deg.

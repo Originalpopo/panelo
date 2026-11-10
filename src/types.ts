@@ -7,10 +7,11 @@ export type LayoutNode = Leaf | Split;
 
 /** Where a photo sits inside a cell. zoom ≥ 1 (1 = just covers the cell); ox/oy in -1..1 pick which part shows; rot = clockwise turn in degrees (0/90/180/270). */
 /**
- * rot: quarter turns from the Rotate button (0/90/180/270). tilt: fine turn from a two-finger twist (degrees, ±45).
+ * rot: quarter turns from the Rotate button (0/90/180/270). tilt: free turn from a two-finger twist or the slider (degrees, -180..180).
+ * flip: mirrored left-right (in the photo's own frame, before turning).
  * ox/oy: -1..1 along the photo's own sides — how far it is slid within the room it has, so it always covers the cell.
  */
-export type Placement = { photoId: string | null; zoom: number; ox: number; oy: number; rot?: number; tilt?: number };
+export type Placement = { photoId: string | null; zoom: number; ox: number; oy: number; rot?: number; tilt?: number; flip?: boolean };
 
 /** Sizes are in thousandths of the frame's short side, so the look is the same on screen and in the saved file. */
 export type FrameStyle = {

@@ -72,11 +72,11 @@ function photoQueue(doc: Doc | null, order: string[]): string[] {
   return [...placed, ...order.filter((p) => !placed.includes(p))];
 }
 
-/** A photo moved to a new layout keeps the way it was turned (quarter turns and tilt). */
+/** A photo moved to a new layout keeps the way it was turned and flipped. */
 function keepTurn(p: Placement, from: Doc | null): Placement {
   if (!p.photoId || !from) return p;
   const old = Object.values(from.cells).find((c) => c.photoId === p.photoId);
-  return { ...p, rot: old?.rot ?? 0, tilt: old?.tilt ?? 0 };
+  return { ...p, rot: old?.rot ?? 0, tilt: old?.tilt ?? 0, flip: old?.flip ?? false };
 }
 
 export const useStore = create<State>((set, get) => ({

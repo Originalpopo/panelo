@@ -13,9 +13,10 @@
   --accent-ink: #000000;
   --empty: #2a2a2a;
   --empty-ink: #6a6a6a;
-  --select: #ffb020;
+  --orange: oklch(75% 0.183 55.934); /* same orange as trading-journal (Tailwind v4 orange-400) */
+  --select: var(--orange);
   --swap: #3ac7b5;
-  --active: #d98200; /* the orange of the chosen sub-menu item */
+  --active: var(--orange); /* the chosen sub-menu item */
   color-scheme: dark;
 }
 
@@ -43,7 +44,6 @@ button:disabled { opacity: 0.35; cursor: default; }
 }
 .brand h1 { margin: 10px 0 2px; font-size: 32px; letter-spacing: 0.5px; }
 .brand p { margin: 0; color: var(--ink-soft); }
-.small { color: var(--ink-soft); font-size: 13px; max-width: 300px; margin: 0; }
 
 .primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -158,17 +158,17 @@ button:disabled { opacity: 0.35; cursor: default; }
 }
 .menu .m-layout { left: 0; }
 .menu .m-border { left: 50%; }
-.menu.open-layout .m-layout { width: 30%; }
+.menu.open-layout .m-layout { width: 26%; }
 .menu.open-layout .m-border { left: 100%; }
-.menu.open-border .m-border { left: 0; width: 30%; }
+.menu.open-border .m-border { left: 0; width: 26%; }
 .menu.open-border .m-layout { left: -50%; }
 .menu .subs {
-  position: absolute; top: 0; left: 30%; right: 0; height: 52px;
+  position: absolute; top: 0; left: 26%; right: 0; height: 52px;
   display: flex; background: #ffffff;
   transform: translateX(105%); transition: transform 0.3s ease;
 }
 .menu.open-layout .s-layout, .menu.open-border .s-border { transform: none; }
-.menu .subs button { flex: 1 1 auto; padding: 0 4px; color: #000000; font-size: 15px; font-weight: 500; }
+.menu .subs button { flex: 1 1 auto; min-width: 0; padding: 0 2px; color: #000000; font-size: 15px; font-weight: 500; }
 .menu .subs button.on { color: var(--active); font-weight: 700; }
 
 /* ---------- sheets ---------- */
@@ -224,3 +224,54 @@ button:disabled { opacity: 0.35; cursor: default; }
 .done span { opacity: 0; animation: done-fade 0.25s 0.55s ease-out forwards; }
 @keyframes done-draw { to { stroke-dashoffset: 0; } }
 @keyframes done-fade { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* ---------- opening screen: pick a frame shape ---------- */
+.start { position: fixed; inset: 0; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.start-back { position: fixed; top: calc(6px + env(safe-area-inset-top)); left: 6px; z-index: 2; background: rgba(0, 0, 0, 0.55); }
+.start-list {
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+  padding: calc(64px + env(safe-area-inset-top)) 16px calc(48px + env(safe-area-inset-bottom));
+}
+.start-item { position: relative; flex: none; display: block; }
+.start-item:active { transform: scale(0.97); }
+.start-item span { position: absolute; overflow: hidden; background: var(--empty); }
+.start-item img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+
+/* ---------- merge hint: an orange dot presses a photo and slides it onto the next one ---------- */
+.merge-hint { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 5; animation: merge-hint-move 2.6s ease-in-out infinite; }
+.merge-hint .dot {
+  position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--orange); border: 3px solid #ffffff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  animation: merge-hint-press 2.6s ease-in-out infinite;
+}
+@keyframes merge-hint-move {
+  0% { transform: translate(0, 0); opacity: 0; }
+  8%, 22% { transform: translate(0, 0); opacity: 1; }
+  62%, 78% { transform: translate(var(--dx), var(--dy)); opacity: 1; }
+  92%, 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
+@keyframes merge-hint-press {
+  0%, 10% { transform: scale(1.25); }
+  20%, 66% { transform: scale(0.85); }
+  76%, 100% { transform: scale(1.25); }
+}
+/* While the hint plays the photos fade; touching the frame ends the hint and brings the colour back. */
+.frame .cell img { transition: filter 0.3s ease; }
+.frame.hinting .cell img { filter: grayscale(0.85) brightness(0.55); }
+.hint-mark { position: absolute; pointer-events: none; z-index: 4; opacity: 0; animation: 2.6s ease-in-out infinite; }
+.hint-mark.keep { box-shadow: inset 0 0 0 3px var(--select); animation-name: hint-keep; }
+.hint-mark.drop { border: 3px dashed var(--select); background: rgba(0, 0, 0, 0.35); animation-name: hint-drop; }
+/* in step with the dot: pressed at 20%, arrives at 62%, lets go at 78% */
+@keyframes hint-keep {
+  0%, 16% { opacity: 0; }
+  20%, 76% { opacity: 1; }
+  82%, 100% { opacity: 0; }
+}
+@keyframes hint-drop {
+  0%, 52% { opacity: 0; }
+  58%, 76% { opacity: 1; }
+  82%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .merge-hint, .merge-hint .dot, .hint-mark { animation-duration: 5s; }
+}

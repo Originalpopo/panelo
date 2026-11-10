@@ -1,28 +1,18 @@
 import { ImagePlus } from 'lucide-react';
 import { useStore } from '../store.ts';
 import { leafIds, presetsFor } from '../layout.ts';
-import { computeLayout, frameSize } from '../geometry.ts';
+import { RATIOS, computeLayout, frameSize } from '../geometry.ts';
 import type { LayoutNode } from '../types.ts';
 
-export type LayoutSub = 'add' | 'merge' | 'adjust';
+export type LayoutSub = 'add' | 'merge' | 'ratio';
 export const LAYOUT_SUBS: { id: LayoutSub; label: string }[] = [
   { id: 'add', label: 'add' },
+  { id: 'ratio', label: 'ratio' },
   { id: 'merge', label: 'merge' },
-  { id: 'adjust', label: 'adjust' },
 ];
 
-export const RATIOS: [number, number][] = [
-  [1, 1],
-  [4, 5],
-  [3, 4],
-  [2, 3],
-  [9, 16],
-  [4, 3],
-  [3, 2],
-  [16, 9],
-];
 
-const THUMB_STYLE = { inner: 30, outer: 40, radiusInner: 0, radiusOuter: 0, color: '', shadow: 0, shadowOpacity: 0 };
+const THUMB_STYLE = { inner: 30, outer: 40, radiusInner: 0, radiusOuter: 0, color: '' };
 
 function Thumb({ root, ratio }: { root: LayoutNode; ratio: [number, number] }) {
   const { W, H } = frameSize(ratio, 52);
@@ -68,8 +58,8 @@ function AddControls({ onAddPhotos }: { onAddPhotos: () => void }) {
   );
 }
 
-/** adjust: frame shape only. Cell sizes are changed with the handles on the frame. */
-function AdjustControls() {
+/** ratio: the frame's shape. (Cell sizes are changed in border › adjust, with the handles on the frame.) */
+function RatioControls() {
   const doc = useStore((s) => s.doc)!;
   const { commit } = useStore.getState();
   return (
@@ -93,5 +83,5 @@ function AdjustControls() {
 export default function LayoutControls({ sub, onAddMore }: { sub: LayoutSub; onAddMore: () => void }) {
   if (sub === 'add') return <AddControls onAddPhotos={onAddMore} />;
   if (sub === 'merge') return null; // merge works by dragging on the frame — no controls
-  return <AdjustControls />;
+  return <RatioControls />;
 }

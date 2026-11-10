@@ -126,7 +126,7 @@ export function gridFor(n: number): LayoutNode {
 
 const PRESETS: Record<number, (() => LayoutNode)[]> = {
   1: [L],
-  2: [() => R(many(2)), () => C(many(2)), () => R(many(2), [2, 1]), () => C(many(2), [2, 1])],
+  2: [() => R(many(2)), () => C(many(2)), () => R(many(2), [2, 1]), () => C(many(2), [2, 1]), () => R(many(2), [1, 2]), () => C(many(2), [1, 2])],
   3: [
     () => R([L(), C(many(2))], [2, 1]),
     () => C([L(), R(many(2))], [2, 1]),
@@ -171,8 +171,82 @@ const PRESETS: Record<number, (() => LayoutNode)[]> = {
   ],
 };
 
-/** Ready-made layouts for n cells (fresh copies every call). */
+/** Ways to share n cells out over lines of 1..maxPer cells, at most maxLines lines. */
+function compositions(n: number, maxPer: number, maxLines: number): number[][] {
+  const out: number[][] = [];
+  const walk = (left: number, acc: number[]) => {
+    if (left === 0) return void out.push(acc);
+    if (acc.length === maxLines) return;
+    for (let k = 1; k <= Math.min(maxPer, left); k++) walk(left - k, [...acc, k]);
+  };
+  walk(n, []);
+  return out;
+}
+
+/** m cells in one line, or in two lines when there are many. */
+function band(m: number, dir: Dir): LayoutNode {
+  const along = dir === 'row' ? R : C;
+  const across = dir === 'row' ? C : R;
+  if (m === 1) return L();
+  if (m <= 4) return along(many(m));
+  const a = Math.ceil(m / 2);
+  return across([along(many(a)), along(many(m - a))]);
+}
+
+/** Made by rule: one big photo on any side, then rows (or columns) of 1–4 photos — evenest first. */
+function generated(n: number): LayoutNode[] {
+  const out: LayoutNode[] = [];
+  if (n >= 3) {
+    const m = n - 1;
+    out.push(
+      C([L(), band(m, 'row')], [2, 1]),
+      C([band(m, 'row'), L()], [1, 2]),
+      R([L(), band(m, 'col')], [2, 1]),
+      R([band(m, 'col'), L()], [1, 2]),
+      R([band(Math.floor(m / 2), 'col'), L(), band(m - Math.floor(m / 2), 'col')], [1, 2, 1]),
+      C([band(Math.floor(m / 2), 'row'), L(), band(m - Math.floor(m / 2), 'row')], [1, 2, 1]),
+    );
+  }
+  const spread = (c: number[]) => Math.max(...c) - Math.min(...c);
+  const comps = compositions(n, 4, 4).sort((a, b) => spread(a) - spread(b) || a.length - b.length);
+  for (const c of comps) {
+    out.push(C(c.map((k) => (k === 1 ? L() : R(many(k))))));
+    out.push(R(c.map((k) => (k === 1 ? L() : C(many(k))))));
+  }
+  return out;
+}
+
+/** Same look = same key: the cells' boxes in a unit square, rounded and sorted (so a 2×2 made of rows equals one made of columns). */
+function shapeKey(root: LayoutNode): string {
+  const boxes: string[] = [];
+  const walk = (n: LayoutNode, x: number, y: number, w: number, h: number) => {
+    if (n.kind === 'leaf') return void boxes.push([x, y, w, h].map((v) => v.toFixed(3)).join(' '));
+    let at = 0;
+    n.children.forEach((c, i) => {
+      const s = n.sizes[i];
+      if (n.dir === 'row') walk(c, x + at * w, y, s * w, h);
+      else walk(c, x, y + at * h, w, s * h);
+      at += s;
+    });
+  };
+  walk(root, 0, 0, 1, 1);
+  return boxes.sort().join('|');
+}
+
+const MAX_CHOICES = 24;
+
+/** Ready-made layouts for n cells (fresh copies every call, same order every call): hand-made first, then made by rule. */
 export function presetsFor(n: number): LayoutNode[] {
-  const list = PRESETS[n];
-  return list ? list.map((f) => f()) : [gridFor(n)];
+  const hand = (PRESETS[n] ?? []).map((f) => f());
+  const seen = new Set<string>();
+  const out: LayoutNode[] = [];
+  for (const raw of [...hand, ...generated(n), gridFor(n)]) {
+    const node = normalize(raw);
+    const key = shapeKey(node);
+    if (seen.has(key) || leafIds(node).length !== n) continue;
+    seen.add(key);
+    out.push(node);
+    if (out.length === MAX_CHOICES) break;
+  }
+  return out;
 }

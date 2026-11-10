@@ -3,7 +3,7 @@ import { computeLayout, type CellRect, type Rect } from './geometry.ts';
 import { leaf, normalize, split } from './layout.ts';
 
 const EPS = 1e-6;
-const NO_GAPS = { inner: 0, outer: 0, radiusInner: 0, radiusOuter: 0, color: '', shadow: 0, shadowOpacity: 0 };
+const NO_GAPS = { inner: 0, outer: 0, radiusInner: 0, radiusOuter: 0, color: '' };
 const near = (a: number, b: number) => Math.abs(a - b) < EPS;
 
 /** Cell rectangles in a 1×1 square with no gaps — enough to reason about who touches whom. */

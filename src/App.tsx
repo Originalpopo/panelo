@@ -6,11 +6,13 @@ import Frame from './components/Frame.tsx';
 import LayoutControls, { LAYOUT_SUBS, type LayoutSub } from './components/LayoutPanel.tsx';
 import BorderControls, { BORDER_SUBS, type BorderSub } from './components/BorderPanel.tsx';
 import ExportSheet from './components/ExportSheet.tsx';
+import StartPicker from './components/StartPicker.tsx';
 
 type Menu = 'layout' | 'border' | null;
 
 export default function App() {
   const doc = useStore((s) => s.doc);
+  const choosing = useStore((s) => s.choosing);
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
   const [menu, setMenu] = useState<Menu>(null);
@@ -71,10 +73,11 @@ export default function App() {
         <button className="primary big" onClick={() => pick(null)} disabled={busy}>
           <ImagePlus size={22} /> {busy ? 'Loading photos…' : 'Choose photos'}
         </button>
-        <p className="small">Pick several at once · Your photos stay on this device</p>
       </div>
     );
   }
+
+  if (choosing) return <StartPicker onBack={() => useStore.getState().reset()} />;
 
   return (
     <div className="editor">
@@ -96,7 +99,7 @@ export default function App() {
         </button>
       </header>
 
-      <Frame showHandles={menu === 'layout' && layoutSub === 'adjust'}
+      <Frame showHandles={menu === 'border' && borderSub === 'adjust'}
         mergeMode={menu === 'layout' && layoutSub === 'merge'}
         photoTools={menu === null || (menu === 'layout' && layoutSub === 'add')} onPickForCell={(id) => pick(id)} />
       {busy && <div className="toast">Loading photos…</div>}

@@ -64,3 +64,15 @@ export function frameSize(ratio: [number, number], longSide: number) {
     ? { W: longSide, H: Math.round((longSide * rh) / rw) }
     : { W: Math.round((longSide * rw) / rh), H: longSide };
 }
+
+/** Frame shapes offered (width : height). */
+export const RATIOS: [number, number][] = [
+  [1, 1],
+  [4, 5],
+  [3, 4],
+  [2, 3],
+  [9, 16],
+  [4, 3],
+  [3, 2],
+  [16, 9],
+];

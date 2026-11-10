@@ -9,12 +9,12 @@ const PALETTE = [
   '#e6e6e6', '#bdbdbd', '#8f8f8f', '#666666', '#454545', '#2b2b2b', '#161616', '#000000',
 ];
 
-export type BorderSub = 'margin' | 'corner' | 'color' | 'shadow';
+export type BorderSub = 'adjust' | 'margin' | 'corner' | 'color';
 export const BORDER_SUBS: { id: BorderSub; label: string }[] = [
+  { id: 'adjust', label: 'adjust' },
   { id: 'margin', label: 'margin' },
   { id: 'corner', label: 'corner' },
   { id: 'color', label: 'color' },
-  { id: 'shadow', label: 'shadow' },
 ];
 
 function Slider({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void }) {
@@ -34,6 +34,9 @@ export default function BorderControls({ sub }: { sub: BorderSub }) {
   const set = (key: keyof FrameStyle) => (v: number | string) => commit((d) => ({ ...d, style: { ...d.style, [key]: v } }), 'style:' + key);
   const pickColor = (c: string) => commit((d) => ({ ...d, style: { ...d.style, color: c } }), 'style:color');
 
+  // adjust: only the handles on the frame (drag a gap to resize the cells beside it) — no panel.
+  if (sub === 'adjust') return null;
+
   return (
     <div className="panel border">
       {sub === 'margin' && (
@@ -46,12 +49,6 @@ export default function BorderControls({ sub }: { sub: BorderSub }) {
         <div className="sliders">
           <Slider label="Inner" value={style.radiusInner} min={0} max={150} onChange={set('radiusInner')} />
           <Slider label="Outer" value={style.radiusOuter} min={0} max={150} onChange={set('radiusOuter')} />
-        </div>
-      )}
-      {sub === 'shadow' && (
-        <div className="sliders">
-          <Slider label="Size" value={style.shadow} min={0} max={60} onChange={set('shadow')} />
-          <Slider label="Opacity" value={style.shadowOpacity} min={0} max={1} step={0.05} onChange={set('shadowOpacity')} />
         </div>
       )}
       {sub === 'color' && (

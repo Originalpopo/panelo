@@ -8,8 +8,6 @@ export const DEFAULT_STYLE: FrameStyle = {
   radiusInner: 0,
   radiusOuter: 0,
   color: '#ffffff',
-  shadow: 0,
-  shadowOpacity: 0.35,
 };
 
 export const emptyPlacement = (photoId: string | null = null): Placement => ({ photoId, zoom: 1, ox: 0, oy: 0, rot: 0 });
@@ -29,6 +27,8 @@ type State = {
   swapFrom: string | null;
   recentColors: string[];
   presetIndex: number;
+  /** Just after the first photos are chosen: the opening screen of frame shapes is up. */
+  choosing: boolean;
   lastKey: string | null;
   lastTime: number;
 
@@ -47,6 +47,8 @@ type State = {
   setSwapFrom: (id: string | null) => void;
   useColor: (c: string) => void;
   setPresetIndex: (i: number) => void;
+  /** Opening screen picked: use this shape and layout (not an undo step). */
+  startWith: (ratio: [number, number], root: LayoutNode, presetIndex: number) => void;
   reset: () => void;
 };
 
@@ -78,6 +80,7 @@ export const useStore = create<State>((set, get) => ({
   swapFrom: null,
   recentColors: [],
   presetIndex: 0,
+  choosing: false,
   lastKey: null,
   lastTime: 0,
 
@@ -121,7 +124,7 @@ export const useStore = create<State>((set, get) => ({
       const ids = leafIds(root);
       const cells: Record<string, Placement> = {};
       ids.forEach((id, i) => (cells[id] = emptyPlacement(incoming[i]?.id ?? null)));
-      set({ doc: { ratio: [1, 1], root, cells, style: { ...DEFAULT_STYLE } }, past: [], future: [], presetIndex: 0 });
+      set({ doc: { ratio: [1, 1], root, cells, style: { ...DEFAULT_STYLE } }, past: [], future: [], presetIndex: 0, choosing: true });
       return;
     }
 
@@ -186,11 +189,18 @@ export const useStore = create<State>((set, get) => ({
   setSwapFrom: (id) => set({ swapFrom: id }),
   useColor: (c) => set({ recentColors: [c, ...get().recentColors.filter((x) => x !== c)].slice(0, 8) }),
   setPresetIndex: (i) => set({ presetIndex: i }),
+  startWith: (ratio, root, presetIndex) => {
+    const { doc, photoOrder } = get();
+    if (!doc) return;
+    const cells: Record<string, Placement> = {};
+    leafIds(root).forEach((id, i) => (cells[id] = emptyPlacement(photoOrder[i] ?? null)));
+    set({ doc: { ...doc, ratio, root, cells }, past: [], future: [], presetIndex, choosing: false, selected: null });
+  },
   reset: () => {
     Object.values(get().photos).forEach((p) => {
       URL.revokeObjectURL(p.url);
       URL.revokeObjectURL(p.preview);
     });
-    set({ doc: null, past: [], future: [], photos: {}, photoOrder: [], selected: null, second: null, swapFrom: null, presetIndex: 0 });
+    set({ doc: null, past: [], future: [], photos: {}, photoOrder: [], selected: null, second: null, swapFrom: null, presetIndex: 0, choosing: false });
   },
 }));

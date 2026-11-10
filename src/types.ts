@@ -15,8 +15,6 @@ export type FrameStyle = {
   radiusInner: number; // cell corners
   radiusOuter: number; // frame corners
   color: string; // frame colour
-  shadow: number; // cell shadow blur
-  shadowOpacity: number; // 0..1
 };
 
 export type Doc = {

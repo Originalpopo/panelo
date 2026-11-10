@@ -41,18 +41,8 @@ export async function renderFrame(doc: Doc, photos: Record<string, Photo>, longS
     const p = doc.cells[cell.id];
     const photo = p?.photoId ? photos[p.photoId] : undefined;
     const radius = st.radiusInner * k;
-    // An empty cell is left in the frame colour (no shadow, no placeholder).
+    // An empty cell is left in the frame colour (no placeholder).
     if (!photo || !p) continue;
-
-    if (st.shadow > 0 && st.shadowOpacity > 0) {
-      ctx.save();
-      ctx.shadowColor = `rgba(0,0,0,${st.shadowOpacity})`;
-      ctx.shadowBlur = st.shadow * k;
-      roundRectPath(ctx, cell, radius);
-      ctx.fillStyle = '#000';
-      ctx.fill();
-      ctx.restore();
-    }
 
     ctx.save();
     roundRectPath(ctx, cell, radius);

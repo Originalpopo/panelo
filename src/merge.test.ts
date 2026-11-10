@@ -5,7 +5,7 @@ import { areNeighbours, mergeCells } from './merge.ts';
 import { computeLayout } from './geometry.ts';
 import type { LayoutNode } from './types.ts';
 
-const NO_GAPS = { inner: 0, outer: 0, radiusInner: 0, radiusOuter: 0, color: '', shadow: 0, shadowOpacity: 0 };
+const NO_GAPS = { inner: 0, outer: 0, radiusInner: 0, radiusOuter: 0, color: '' };
 const rectOf = (root: LayoutNode, id: string) => {
   const c = computeLayout(root, 900, 900, NO_GAPS).cells.find((c) => c.id === id)!;
   return [c.x, c.y, c.w, c.h].map((v) => Math.round(v));

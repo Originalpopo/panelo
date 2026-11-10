@@ -5,7 +5,7 @@ import { computeLayout, frameSize, photoRect } from './geometry.ts';
 import type { FrameStyle } from './types.ts';
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
-const style: FrameStyle = { inner: 10, outer: 20, radiusInner: 0, radiusOuter: 0, color: '#fff', shadow: 0, shadowOpacity: 0 };
+const style: FrameStyle = { inner: 10, outer: 20, radiusInner: 0, radiusOuter: 0, color: '#fff' };
 
 test('splitting a cell keeps its id and adds one', () => {
   const a = leaf('a');
@@ -45,6 +45,17 @@ test('every preset has the right number of cells and sizes add to 1', () => {
     }
     assert.equal(leafIds(gridFor(n)).length, n);
   }
+});
+
+test('layout choices: same order every call, no two look alike', () => {
+  const look = (p: ReturnType<typeof computeLayout>) => p.cells.map((c) => [c.x, c.y, c.w, c.h].map(Math.round).join(' ')).sort().join('|');
+  for (let n = 1; n <= 16; n++) {
+    const a = presetsFor(n).map((p) => look(computeLayout(p, 1000, 1000, style)));
+    const b = presetsFor(n).map((p) => look(computeLayout(p, 1000, 1000, style)));
+    assert.deepEqual(a, b, `order for ${n}`);
+    assert.equal(new Set(a).size, a.length, `duplicates for ${n}`);
+  }
+  assert.ok(presetsFor(4).length >= 15);
 });
 
 test('cells fill the frame inside the margin with exact gaps', () => {

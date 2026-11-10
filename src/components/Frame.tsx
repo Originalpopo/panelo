@@ -28,8 +28,9 @@ export default function Frame({
   onPickForCell,
 }: {
   showHandles: boolean;
+  /** layout › merge: no Cell bar, no swap — a press-and-drag merges cells. Everywhere else a tap picks a cell and shows the Cell bar. */
   mergeMode: boolean;
-  /** Main screen and layout › add: tap a photo to pick it — bar, move, zoom, double-tap reset. */
+  /** Main screen and layout › add: a picked photo can also be moved, zoomed and double-tap reset. */
   photoTools: boolean;
   onPickForCell: (cellId: string) => void;
 }) {
@@ -68,6 +69,9 @@ export default function Frame({
   /** The photo being carried for a swap: where the finger has moved it, and the cell under the finger. */
   const [lift, setLift] = useState<{ id: string; dx: number; dy: number; over: string | null } | null>(null);
   const stopLiftTimer = () => window.clearTimeout(liftTimer.current);
+  /** merge: an orange dot shows how it's done each time merge opens, until the frame is touched. */
+  const [mergeHint, setMergeHint] = useState(mergeMode);
+  useEffect(() => setMergeHint(mergeMode), [mergeMode]);
 
   // Stop iOS from scrolling/zooming the page while working on the frame.
   useEffect(() => {
@@ -84,19 +88,22 @@ export default function Frame({
     const d = s.doc!;
     // Tap a photo to pick it (bar appears; tap again or another photo to leave it).
     // Double-tap puts it back to its smallest size, centred. An empty cell gets the bar too (add / delete).
+    // merge has no Cell bar: a tap only fills an empty cell.
+    if (mergeMode) {
+      if (!d.cells[cellId]?.photoId) onPickForCell(cellId);
+      return;
+    }
     if (photoTools) {
       const now = Date.now();
       const last = lastTap.current;
       lastTap.current = { id: cellId, t: now };
-      if (last.id === cellId && now - last.t < DOUBLE_TAP_MS) {
+      if (last.id === cellId && now - last.t < DOUBLE_TAP_MS && d.cells[cellId]?.photoId) {
         lastTap.current = { id: '', t: 0 };
         s.commit((doc) => ({ ...doc, cells: { ...doc.cells, [cellId]: { ...doc.cells[cellId], zoom: 1, ox: 0, oy: 0 } } }));
         return s.select(cellId);
       }
-      return s.select(s.selected === cellId ? null : cellId);
     }
-    // Other menus don't pick photos; a tap only fills an empty cell.
-    if (!d.cells[cellId]?.photoId) onPickForCell(cellId);
+    s.select(s.selected === cellId ? null : cellId);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -106,6 +113,7 @@ export default function Frame({
       /* pointer already gone — nothing to capture */
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setMergeHint(false);
     const d = useStore.getState().doc!;
     const g = gesture.current;
 
@@ -258,10 +266,20 @@ export default function Frame({
 
   const st = doc.style;
   const k = layout.k;
-  const shadow = st.shadow > 0 && st.shadowOpacity > 0 ? `0 0 ${st.shadow * k}px rgba(0,0,0,${st.shadowOpacity})` : 'none';
 
-  // Floating toolbar over the tapped photo (add menu): turn, replace, delete.
-  const barCell = photoTools && selected && doc.cells[selected] ? layout.cells.find((c) => c.id === selected) : undefined;
+  // merge hint: the first two cells (reading order) that can be merged; the dot slides from the first to the second.
+  const hintPair = useMemo(() => {
+    if (!mergeHint) return null;
+    for (const a of layout.cells)
+      for (const b of layout.cells) {
+        const plan = a.id !== b.id ? mergeCells(doc.root, a.id, b.id) : null;
+        if (plan) return { a, b, drop: layout.cells.filter((c) => plan.removed.includes(c.id)) };
+      }
+    return null;
+  }, [mergeHint, layout, doc.root]);
+
+  // Cell bar: floating toolbar over the tapped cell (every menu but merge): turn, replace / add, delete.
+  const barCell = !mergeMode && !lift && selected && doc.cells[selected] ? layout.cells.find((c) => c.id === selected) : undefined;
   const barHasPhoto = !!(barCell && doc.cells[barCell.id]?.photoId);
   const BAR_W = 156;
   const BAR_H = 46;
@@ -279,12 +297,12 @@ export default function Frame({
       ref={stageRef}
       onPointerDown={(e) => {
         // tapping the black space around the frame leaves the picked photo
-        if (photoTools && e.target === e.currentTarget) useStore.getState().select(null);
+        if (!mergeMode && e.target === e.currentTarget) useStore.getState().select(null);
       }}
     >
       <div className="frame-wrap" style={{ width: W, height: H }}>
       <div
-        className="frame"
+        className={`frame ${hintPair ? 'hinting' : ''}`}
         style={{ width: W, height: H, background: st.color, borderRadius: st.radiusOuter * k }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -309,7 +327,6 @@ export default function Frame({
                 width: c.w,
                 height: c.h,
                 borderRadius: Math.min(st.radiusInner * k, c.w / 2, c.h / 2),
-                boxShadow: shadow,
                 ...(lift?.id === c.id && { transform: `translate(${lift.dx}px, ${lift.dy}px) scale(1.06)` }),
               }}
             >
@@ -349,6 +366,28 @@ export default function Frame({
           );
         })}
       </div>
+      {/* merge hint: the same orange marks as a real merge — solid on the photo kept, dashed on the ones that go */}
+      {hintPair &&
+        [hintPair.a, ...hintPair.drop].map((c, i) => (
+          <div
+            key={c.id}
+            className={`hint-mark ${i === 0 ? 'keep' : 'drop'}`}
+            style={{ left: c.x, top: c.y, width: c.w, height: c.h, borderRadius: Math.min(st.radiusInner * k, c.w / 2, c.h / 2) }}
+          />
+        ))}
+      {hintPair && (
+        <div
+          className="merge-hint"
+          style={{
+            left: hintPair.a.x + hintPair.a.w / 2,
+            top: hintPair.a.y + hintPair.a.h / 2,
+            ['--dx' as string]: `${hintPair.b.x + hintPair.b.w / 2 - (hintPair.a.x + hintPair.a.w / 2)}px`,
+            ['--dy' as string]: `${hintPair.b.y + hintPair.b.h / 2 - (hintPair.a.y + hintPair.a.h / 2)}px`,
+          }}
+        >
+          <span className="dot" />
+        </div>
+      )}
       {barCell && (
         <div
           className="cell-bar"

@@ -7,12 +7,14 @@ import LayoutControls, { LAYOUT_SUBS, type LayoutSub } from './components/Layout
 import BorderControls, { BORDER_SUBS, type BorderSub } from './components/BorderPanel.tsx';
 import ExportSheet from './components/ExportSheet.tsx';
 import StartPicker from './components/StartPicker.tsx';
+import { TextControls, TextEditor } from './components/TextPanel.tsx';
 
-type Menu = 'layout' | 'border' | null;
+type Menu = 'layout' | 'border' | 'text' | null;
 
 export default function App() {
   const doc = useStore((s) => s.doc);
   const choosing = useStore((s) => s.choosing);
+  const textEdit = useStore((s) => s.textEdit);
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
   const [menu, setMenu] = useState<Menu>(null);
@@ -50,6 +52,7 @@ export default function App() {
     setLayoutSub(null);
     setBorderSub(null);
     useStore.getState().select(null);
+    useStore.getState().pickText(null);
   };
 
   const startOver = () => {
@@ -101,21 +104,25 @@ export default function App() {
 
       <Frame showHandles={menu === 'border' && borderSub === 'adjust'}
         mergeMode={menu === 'layout' && layoutSub === 'merge'}
-        photoTools={menu === null || (menu === 'layout' && layoutSub === 'add')} onPickForCell={(id) => pick(id)} />
+        photoTools={menu === null || (menu === 'layout' && layoutSub === 'add')} textMode={menu === 'text'} onPickForCell={(id) => pick(id)} />
       {busy && <div className="toast">Loading photos…</div>}
 
       <section className="tools">
         {menu === 'layout' && layoutSub && <LayoutControls sub={layoutSub} onAddMore={() => pick(null, true)} />}
         {menu === 'border' && borderSub && <BorderControls sub={borderSub} />}
+        {menu === 'text' && <TextControls />}
       </section>
 
-      {/* Main menu. Opening one item slides it to the left edge, pushes the other off screen, and shows its sub-menu. */}
+      {/* Main menu. Opening one item slides it to the left edge, pushes the others off screen, and shows its sub-menu. */}
       <nav className={`menu ${menu ? `open-${menu}` : ''}`}>
         <button className="main m-layout" onClick={() => openMenu(menu === 'layout' ? null : 'layout')}>
           LAYOUT
         </button>
         <button className="main m-border" onClick={() => openMenu(menu === 'border' ? null : 'border')}>
           BORDER
+        </button>
+        <button className="main m-text" onClick={() => openMenu(menu === 'text' ? null : 'text')}>
+          TEXT
         </button>
         <div className="subs s-layout" aria-hidden={menu !== 'layout'}>
           {LAYOUT_SUBS.map((s) => (
@@ -134,8 +141,14 @@ export default function App() {
             </button>
           ))}
         </div>
+        <div className="subs s-text" aria-hidden={menu !== 'text'}>
+          <button tabIndex={menu === 'text' ? 0 : -1} onClick={() => useStore.getState().editText('new')}>
+            add
+          </button>
+        </div>
       </nav>
 
+      {textEdit && <TextEditor />}
       {exporting && <ExportSheet onClose={() => setExporting(false)} />}
     </div>
   );

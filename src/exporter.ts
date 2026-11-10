@@ -1,5 +1,5 @@
 import type { Doc, Photo } from './types.ts';
-import { computeLayout, frameSize, photoRect, sideways, type Rect } from './geometry.ts';
+import { computeLayout, frameSize, photoPlace, type Rect } from './geometry.ts';
 
 function roundRectPath(ctx: CanvasRenderingContext2D, r: Rect, radius: number) {
   const rad = Math.max(0, Math.min(radius, r.w / 2, r.h / 2));
@@ -48,12 +48,35 @@ export async function renderFrame(doc: Doc, photos: Record<string, Photo>, longS
     roundRectPath(ctx, cell, radius);
     ctx.clip();
     const img = await loadImage(photo.url);
-    const r = photoRect(cell, photo.w, photo.h, p);
-    const [dw, dh] = sideways(p) ? [r.h, r.w] : [r.w, r.h];
-    ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
-    ctx.rotate(((p.rot ?? 0) * Math.PI) / 180);
-    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    const at = photoPlace(cell, photo.w, photo.h, p);
+    ctx.translate(at.cx, at.cy);
+    ctx.rotate(at.rad);
+    ctx.drawImage(img, -at.w / 2, -at.h / 2, at.w, at.h);
     img.src = ''; // let the browser drop the decoded full-size photo before the next one
+    ctx.restore();
+  }
+
+  // Texts last, on top of everything, drawn the way the screen shows them (bold Inter, centred lines, line height 1.15).
+  const short = Math.min(W, H);
+  for (const t of doc.texts ?? []) {
+    const size = (t.size * short) / 1000;
+    const font = `700 ${size}px Inter, system-ui, sans-serif`;
+    try {
+      await document.fonts.load(font, t.text);
+    } catch {
+      /* falls back to the system font */
+    }
+    const lines = t.text.split('\n');
+    const lh = size * 1.15;
+    ctx.save();
+    ctx.translate(t.x * W, t.y * H);
+    ctx.rotate((t.rot * Math.PI) / 180);
+    ctx.font = font;
+    ctx.fillStyle = t.color;
+    ctx.globalAlpha = t.opacity ?? 1;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    lines.forEach((line, i) => ctx.fillText(line, 0, (i - (lines.length - 1) / 2) * lh));
     ctx.restore();
   }
 

@@ -145,29 +145,34 @@ button:disabled { opacity: 0.35; cursor: default; }
 .sw.on { outline: 2px solid var(--select); outline-offset: 1px; }
 
 /* ---------- main menu ----------
-   Closed: LAYOUT | BORDER. Opening one slides it to the left edge, pushes the other off screen,
+   Closed: LAYOUT | BORDER | TEXT. Opening one slides it to the left edge, pushes the others off screen,
    and slides its white sub-menu in from the right. */
 .menu {
   position: relative; flex: none; overflow: hidden; background: var(--bar);
   height: calc(52px + env(safe-area-inset-bottom));
 }
 .menu .main {
-  position: absolute; top: 0; height: 52px; width: 50%;
+  position: absolute; top: 0; height: 52px; width: 33.34%;
   font-weight: 700; letter-spacing: 0.5px; color: var(--bar-ink);
   transition: left 0.3s ease, width 0.3s ease;
 }
 .menu .m-layout { left: 0; }
-.menu .m-border { left: 50%; }
-.menu.open-layout .m-layout { width: 26%; }
-.menu.open-layout .m-border { left: 100%; }
-.menu.open-border .m-border { left: 0; width: 26%; }
-.menu.open-border .m-layout { left: -50%; }
+.menu .m-border { left: 33.33%; }
+.menu .m-text { left: 66.66%; }
+/* the opened one goes to the left edge; the others leave (those before it to the left, those after it to the right) */
+.menu[class*='open-'] .main { width: 26%; }
+.menu.open-layout .m-border, .menu.open-layout .m-text { left: 100%; }
+.menu.open-border .m-border { left: 0; }
+.menu.open-border .m-layout { left: -34%; }
+.menu.open-border .m-text { left: 100%; }
+.menu.open-text .m-text { left: 0; }
+.menu.open-text .m-layout, .menu.open-text .m-border { left: -34%; }
 .menu .subs {
   position: absolute; top: 0; left: 26%; right: 0; height: 52px;
   display: flex; background: #ffffff;
   transform: translateX(105%); transition: transform 0.3s ease;
 }
-.menu.open-layout .s-layout, .menu.open-border .s-border { transform: none; }
+.menu.open-layout .s-layout, .menu.open-border .s-border, .menu.open-text .s-text { transform: none; }
 .menu .subs button { flex: 1 1 auto; min-width: 0; padding: 0 2px; color: #000000; font-size: 15px; font-weight: 500; }
 .menu .subs button.on { color: var(--active); font-weight: 700; }
 
@@ -274,4 +279,36 @@ button:disabled { opacity: 0.35; cursor: default; }
 }
 @media (prefers-reduced-motion: reduce) {
   .merge-hint, .merge-hint .dot, .hint-mark { animation-duration: 5s; }
+}
+
+/* ---------- text ---------- */
+.texts { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.texts.live .text-item { pointer-events: auto; touch-action: none; }
+.text-catch { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
+.text-item {
+  position: absolute; font-weight: 700; line-height: 1.15; white-space: pre; text-align: center;
+  padding: 0.08em 0.18em; border-radius: 4px; outline-offset: 2px;
+}
+.text-item.on { outline: 2px dashed var(--select); }
+.text-tools { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 12px 14px; }
+.text-colors { display: grid; grid-template-columns: repeat(6, 28px); gap: 10px 12px; }
+.text-colors .sw { width: 28px; height: 28px; min-width: 0; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+.text-colors .sw.on, .text-fade .sw.on { outline: 2px solid var(--select); outline-offset: 2px; }
+/* opacity slider in place of the colours: same height as the two rows of colours, so nothing jumps */
+.text-fade { flex: 1; min-width: 0; height: 66px; margin: 0 8px; display: flex; align-items: center; gap: 14px; }
+.text-fade .sw { flex: none; width: 28px; height: 28px; min-width: 0; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+.text-fade .slider { flex: 1; }
+.text-edit {
+  position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.82);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: calc(84px + env(safe-area-inset-top)) 20px 20px;
+}
+.text-edit textarea {
+  width: 100%; max-width: 520px; background: none; border: 0; outline: none; resize: none;
+  color: #ffffff; font: 700 30px/1.15 'Inter', system-ui, sans-serif; text-align: center; caret-color: var(--orange);
+  -webkit-user-select: text; user-select: text;
+}
+.text-done {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 8px 16px; border-radius: 10px;
 }

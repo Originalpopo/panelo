@@ -40,19 +40,46 @@ export function computeLayout(root: LayoutNode, W: number, H: number, style: Fra
   return { cells, dividers, k };
 }
 
-/** True when the photo is turned on its side (90° or 270°). */
-export const sideways = (p: Placement) => ((p.rot ?? 0) / 90) % 2 === 1;
+export const TILT_MAX = 45;
 
 /**
- * Where to draw a photo so it covers the cell, honouring zoom, offset and rotation.
- * The rect is the turned photo's outline; draw the image rotated about the rect's centre.
+ * Where to draw a photo: an image w×h, centred on (cx, cy), turned by deg.
+ * It is always big enough to cover the whole cell at any angle — the cell, seen from the photo's own
+ * (turned) sides, is a box bw×bh, and the photo is scaled to cover that box. sx/sy is the room the photo
+ * has to slide along its own sides; ox/oy (-1..1) say how much of it is used, so no gap can ever show.
  */
-export function photoRect(cell: Rect, pw: number, ph: number, p: Placement): Rect {
-  const [iw, ih] = sideways(p) ? [ph, pw] : [pw, ph];
-  const s = Math.max(cell.w / iw, cell.h / ih) * p.zoom;
-  const w = iw * s;
-  const h = ih * s;
-  return { x: cell.x - ((w - cell.w) / 2) * (1 + p.ox), y: cell.y - ((h - cell.h) / 2) * (1 + p.oy), w, h };
+export type PhotoPlace = { cx: number; cy: number; w: number; h: number; deg: number; rad: number; sx: number; sy: number };
+
+export function photoPlace(cell: Rect, pw: number, ph: number, p: Placement): PhotoPlace {
+  const deg = (p.rot ?? 0) + (p.tilt ?? 0);
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const c = Math.abs(cos) < 1e-9 ? 0 : Math.abs(cos);
+  const s = Math.abs(sin) < 1e-9 ? 0 : Math.abs(sin);
+  const bw = cell.w * c + cell.h * s;
+  const bh = cell.w * s + cell.h * c;
+  const k = Math.max(bw / pw, bh / ph) * p.zoom;
+  const w = pw * k;
+  const h = ph * k;
+  const sx = Math.max(0, (w - bw) / 2);
+  const sy = Math.max(0, (h - bh) / 2);
+  // the photo's centre, measured along its own sides from the cell's centre, then turned onto the screen
+  const lx = -p.ox * sx;
+  const ly = -p.oy * sy;
+  return { cx: cell.x + cell.w / 2 + lx * cos - ly * sin, cy: cell.y + cell.h / 2 + lx * sin + ly * cos, w, h, deg, rad, sx, sy };
+}
+
+/** A finger slid (dx, dy) on screen: the new ox/oy for a photo placed as `at` (the slide is turned onto the photo's own sides). */
+export function slidePhoto(at: PhotoPlace, start: Placement, dx: number, dy: number): { ox: number; oy: number } {
+  const cos = Math.cos(at.rad);
+  const sin = Math.sin(at.rad);
+  const lx = dx * cos + dy * sin;
+  const ly = -dx * sin + dy * cos;
+  return {
+    ox: at.sx > 0.25 ? clamp(start.ox - lx / at.sx, -1, 1) : 0,
+    oy: at.sy > 0.25 ? clamp(start.oy - ly / at.sy, -1, 1) : 0,
+  };
 }
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));

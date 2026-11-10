@@ -17,7 +17,7 @@ export const BORDER_SUBS: { id: BorderSub; label: string }[] = [
   { id: 'color', label: 'color' },
 ];
 
-function Slider({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void }) {
+export function Slider({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void }) {
   return (
     <label className="slider">
       <span className="lbl">{label}</span>

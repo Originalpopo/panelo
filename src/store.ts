@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Doc, FrameStyle, LayoutNode, Photo, Placement } from './types.ts';
-import { leafIds, presetsFor } from './layout.ts';
+import type { Doc, FrameStyle, LayoutNode, Photo, Placement, TextItem } from './types.ts';
+import { leafIds, presetsFor, uid } from './layout.ts';
 
 export const DEFAULT_STYLE: FrameStyle = {
   inner: 12,
@@ -10,7 +10,7 @@ export const DEFAULT_STYLE: FrameStyle = {
   color: '#ffffff',
 };
 
-export const emptyPlacement = (photoId: string | null = null): Placement => ({ photoId, zoom: 1, ox: 0, oy: 0, rot: 0 });
+export const emptyPlacement = (photoId: string | null = null): Placement => ({ photoId, zoom: 1, ox: 0, oy: 0, rot: 0, tilt: 0 });
 
 const HISTORY_LIMIT = 60;
 const COALESCE_MS = 900;
@@ -27,6 +27,10 @@ type State = {
   swapFrom: string | null;
   recentColors: string[];
   presetIndex: number;
+  /** The text picked on the frame (TEXT menu). */
+  textSel: string | null;
+  /** The text being typed: an id, 'new' for one not added yet, or null. */
+  textEdit: string | null;
   /** Just after the first photos are chosen: the opening screen of frame shapes is up. */
   choosing: boolean;
   lastKey: string | null;
@@ -47,6 +51,12 @@ type State = {
   setSwapFrom: (id: string | null) => void;
   useColor: (c: string) => void;
   setPresetIndex: (i: number) => void;
+  /** Adds a text in the middle of the frame (white, bold) and picks it. */
+  addText: (text: string) => void;
+  updateText: (id: string, patch: Partial<TextItem>, key?: string) => void;
+  removeText: (id: string) => void;
+  pickText: (id: string | null) => void;
+  editText: (id: string | null) => void;
   /** Opening screen picked: use this shape and layout (not an undo step). */
   startWith: (ratio: [number, number], root: LayoutNode, presetIndex: number) => void;
   reset: () => void;
@@ -62,11 +72,11 @@ function photoQueue(doc: Doc | null, order: string[]): string[] {
   return [...placed, ...order.filter((p) => !placed.includes(p))];
 }
 
-/** A photo moved to a new layout keeps the way it was turned. */
+/** A photo moved to a new layout keeps the way it was turned (quarter turns and tilt). */
 function keepTurn(p: Placement, from: Doc | null): Placement {
   if (!p.photoId || !from) return p;
   const old = Object.values(from.cells).find((c) => c.photoId === p.photoId);
-  return { ...p, rot: old?.rot ?? 0 };
+  return { ...p, rot: old?.rot ?? 0, tilt: old?.tilt ?? 0 };
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -80,6 +90,8 @@ export const useStore = create<State>((set, get) => ({
   swapFrom: null,
   recentColors: [],
   presetIndex: 0,
+  textSel: null,
+  textEdit: null,
   choosing: false,
   lastKey: null,
   lastTime: 0,
@@ -103,13 +115,13 @@ export const useStore = create<State>((set, get) => ({
   undo: () => {
     const { doc, past, future } = get();
     if (!doc || past.length === 0) return;
-    set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future], lastKey: null, swapFrom: null, selected: null, second: null });
+    set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future], lastKey: null, swapFrom: null, selected: null, second: null, textSel: null });
   },
 
   redo: () => {
     const { doc, past, future } = get();
     if (!doc || future.length === 0) return;
-    set({ doc: future[0], past: [...past, doc], future: future.slice(1), lastKey: null, swapFrom: null, selected: null, second: null });
+    set({ doc: future[0], past: [...past, doc], future: future.slice(1), lastKey: null, swapFrom: null, selected: null, second: null, textSel: null });
   },
 
   addPhotos: (incoming, targetCell) => {
@@ -189,6 +201,19 @@ export const useStore = create<State>((set, get) => ({
   setSwapFrom: (id) => set({ swapFrom: id }),
   useColor: (c) => set({ recentColors: [c, ...get().recentColors.filter((x) => x !== c)].slice(0, 8) }),
   setPresetIndex: (i) => set({ presetIndex: i }),
+  addText: (text) => {
+    const id = uid();
+    get().commit((d) => ({ ...d, texts: [...(d.texts ?? []), { id, text, x: 0.5, y: 0.5, size: 80, rot: 0, color: '#ffffff' }] }));
+    set({ textSel: id });
+  },
+  updateText: (id, patch, key) =>
+    get().commit((d) => ({ ...d, texts: (d.texts ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t)) }), key),
+  removeText: (id) => {
+    get().commit((d) => ({ ...d, texts: (d.texts ?? []).filter((t) => t.id !== id) }));
+    set({ textSel: null });
+  },
+  pickText: (id) => set({ textSel: id }),
+  editText: (id) => set({ textEdit: id }),
   startWith: (ratio, root, presetIndex) => {
     const { doc, photoOrder } = get();
     if (!doc) return;
@@ -201,6 +226,6 @@ export const useStore = create<State>((set, get) => ({
       URL.revokeObjectURL(p.url);
       URL.revokeObjectURL(p.preview);
     });
-    set({ doc: null, past: [], future: [], photos: {}, photoOrder: [], selected: null, second: null, swapFrom: null, presetIndex: 0, choosing: false });
+    set({ doc: null, past: [], future: [], photos: {}, photoOrder: [], selected: null, second: null, swapFrom: null, presetIndex: 0, choosing: false, textSel: null, textEdit: null });
   },
 }));

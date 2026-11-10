@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gridFor, leaf, leafIds, presetsFor, removeCell, split, splitCell } from './layout.ts';
-import { computeLayout, frameSize, photoRect } from './geometry.ts';
+import { computeLayout, frameSize, photoPlace, slidePhoto } from './geometry.ts';
 import type { FrameStyle } from './types.ts';
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -73,12 +73,13 @@ test('cells fill the frame inside the margin with exact gaps', () => {
 
 test('photo covers the cell at zoom 1 and offsets stay inside', () => {
   const cell = { x: 0, y: 0, w: 100, h: 100 };
-  const r = photoRect(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 0, oy: 0 });
+  const r = photoPlace(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 0, oy: 0 });
   assert.equal(r.h, 100);
   assert.equal(r.w, 200);
-  assert.equal(r.x, -50);
-  assert.equal(photoRect(cell, 400, 200, { photoId: 'p', zoom: 1, ox: -1, oy: 0 }).x, 0);
-  assert.equal(photoRect(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 1, oy: 0 }).x, -100);
+  assert.equal(r.cx, 50);
+  // slid fully one way: the photo's left (or right) edge sits on the cell's edge
+  assert.equal(photoPlace(cell, 400, 200, { photoId: 'p', zoom: 1, ox: -1, oy: 0 }).cx - 100, 0);
+  assert.equal(photoPlace(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 1, oy: 0 }).cx + 100, 100);
 });
 
 test('frame size keeps the ratio on the long side', () => {
@@ -89,10 +90,32 @@ test('frame size keeps the ratio on the long side', () => {
 test('a photo turned on its side covers the cell with its height and width swapped', () => {
   const cell = { x: 0, y: 0, w: 100, h: 100 };
   // 400×200 landscape turned 90° becomes 200×400 portrait: width fits, height overflows
-  const r = photoRect(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 0, oy: 0, rot: 90 });
-  assert.equal(r.w, 100);
-  assert.equal(r.h, 200);
-  assert.equal(r.y, -50);
-  const flat = photoRect(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 0, oy: 0, rot: 180 });
-  assert.equal(flat.w, 200);
+  const r = photoPlace(cell, 400, 200, { photoId: 'p', zoom: 1, ox: 0, oy: 0, rot: 90 });
+  assert.equal(r.w, 200);
+  assert.equal(r.h, 100);
+  assert.ok(Math.abs(r.sx - 50) < 1e-9 && r.sy === 0);
+  // sliding the finger down moves a sideways photo along its own long side
+  const moved = slidePhoto(r, { photoId: 'p', zoom: 1, ox: 0, oy: 0, rot: 90 }, 0, 25);
+  assert.ok(Math.abs(moved.ox + 0.5) < 1e-9 && moved.oy === 0);
+});
+
+test('a tilted photo never leaves a gap in its cell, whatever the zoom, slide or angle', () => {
+  const cells = [{ x: 10, y: 20, w: 100, h: 100 }, { x: 0, y: 0, w: 300, h: 80 }, { x: 5, y: 5, w: 60, h: 240 }];
+  const sizes: [number, number][] = [[400, 300], [300, 400], [1000, 200]];
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let n = 0; n < 3000; n++) {
+    const cell = cells[n % 3];
+    const [pw, ph] = sizes[Math.floor(n / 3) % 3];
+    const p = { photoId: 'p', zoom: 1 + rnd() * 2, ox: rnd() * 2 - 1, oy: rnd() * 2 - 1, rot: 90 * Math.floor(rnd() * 4), tilt: rnd() * 90 - 45 };
+    const at = photoPlace(cell, pw, ph, p);
+    const cos = Math.cos(at.rad);
+    const sin = Math.sin(at.rad);
+    for (const [x, y] of [[cell.x, cell.y], [cell.x + cell.w, cell.y], [cell.x, cell.y + cell.h], [cell.x + cell.w, cell.y + cell.h]]) {
+      // the cell corner, seen from the photo's own sides
+      const lx = (x - at.cx) * cos + (y - at.cy) * sin;
+      const ly = -(x - at.cx) * sin + (y - at.cy) * cos;
+      assert.ok(Math.abs(lx) <= at.w / 2 + 1e-6 && Math.abs(ly) <= at.h / 2 + 1e-6, `corner outside photo: ${JSON.stringify(p)}`);
+    }
+  }
 });

@@ -1,16 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ImagePlus, RotateCw, Images, Trash2 } from 'lucide-react';
 import { useStore, emptyPlacement } from '../store.ts';
-import { clamp, computeLayout, photoRect, sideways, type DividerRect } from '../geometry.ts';
+import { TILT_MAX, clamp, computeLayout, photoPlace, slidePhoto, type DividerRect } from '../geometry.ts';
 import { findNode, setSizes } from '../layout.ts';
 import { mergeCells } from '../merge.ts';
+import TextLayer from './TextLayer.tsx';
 import type { Placement } from '../types.ts';
 
 type Gesture =
   | { mode: 'none' }
   // fixed: the finger is on a photo that isn't picked — it can't be moved, only tapped
   | { mode: 'pan'; cellId: string; x0: number; y0: number; start: Placement; moved: boolean; fixed?: boolean }
-  | { mode: 'pinch'; cellId: string; d0: number; start: Placement }
+  // two fingers on the picked photo: spread = zoom, twist = tilt
+  | { mode: 'pinch'; cellId: string; d0: number; a0: number; start: Placement }
   | { mode: 'divider'; div: DividerRect; x0: number; y0: number; sizes0: number[] }
   | { mode: 'mergeDrag'; from: string; over: string | null; x0: number; y0: number; moved: boolean }
   // long-press lifted a photo; it follows the finger and swaps with the cell it is dropped on
@@ -25,6 +27,7 @@ export default function Frame({
   showHandles,
   mergeMode,
   photoTools,
+  textMode,
   onPickForCell,
 }: {
   showHandles: boolean;
@@ -32,6 +35,8 @@ export default function Frame({
   mergeMode: boolean;
   /** Main screen and layout › add: a picked photo can also be moved, zoomed and double-tap reset. */
   photoTools: boolean;
+  /** TEXT menu: the texts can be touched (moved, sized, turned, picked). */
+  textMode: boolean;
   onPickForCell: (cellId: string) => void;
 }) {
   const doc = useStore((s) => s.doc)!;
@@ -87,7 +92,7 @@ export default function Frame({
     const s = useStore.getState();
     const d = s.doc!;
     // Tap a photo to pick it (bar appears; tap again or another photo to leave it).
-    // Double-tap puts it back to its smallest size, centred. An empty cell gets the bar too (add / delete).
+    // Double-tap puts it back to its smallest size, centred and straight (quarter turns stay). An empty cell gets the bar too (add / delete).
     // merge has no Cell bar: a tap only fills an empty cell.
     if (mergeMode) {
       if (!d.cells[cellId]?.photoId) onPickForCell(cellId);
@@ -99,7 +104,7 @@ export default function Frame({
       lastTap.current = { id: cellId, t: now };
       if (last.id === cellId && now - last.t < DOUBLE_TAP_MS && d.cells[cellId]?.photoId) {
         lastTap.current = { id: '', t: 0 };
-        s.commit((doc) => ({ ...doc, cells: { ...doc.cells, [cellId]: { ...doc.cells[cellId], zoom: 1, ox: 0, oy: 0 } } }));
+        s.commit((doc) => ({ ...doc, cells: { ...doc.cells, [cellId]: { ...doc.cells[cellId], zoom: 1, ox: 0, oy: 0, tilt: 0 } } }));
         return s.select(cellId);
       }
     }
@@ -114,6 +119,7 @@ export default function Frame({
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     setMergeHint(false);
+    if (textMode) useStore.getState().pickText(null);
     const d = useStore.getState().doc!;
     const g = gesture.current;
 
@@ -152,7 +158,7 @@ export default function Frame({
     } else if (pointers.current.size === 2) stopLiftTimer();
     if (pointers.current.size === 2 && ((g.mode === 'pan' && !g.fixed) || g.mode === 'pinch')) {
       const [p1, p2] = [...pointers.current.values()];
-      gesture.current = { mode: 'pinch', cellId: g.cellId, d0: Math.hypot(p1.x - p2.x, p1.y - p2.y), start: d.cells[g.cellId] };
+      gesture.current = { mode: 'pinch', cellId: g.cellId, d0: Math.hypot(p1.x - p2.x, p1.y - p2.y), a0: Math.atan2(p2.y - p1.y, p2.x - p1.x), start: d.cells[g.cellId] };
     }
   };
 
@@ -172,18 +178,19 @@ export default function Frame({
       const photo = g.start?.photoId ? s.photos[g.start.photoId] : undefined;
       const cell = cellRect(g.cellId);
       if (!photo || !cell) return;
-      const r = photoRect(cell, photo.w, photo.h, g.start);
-      const slackX = r.w - cell.w;
-      const slackY = r.h - cell.h;
-      const ox = slackX > 0.5 ? clamp(g.start.ox - (2 * dx) / slackX, -1, 1) : 0;
-      const oy = slackY > 0.5 ? clamp(g.start.oy - (2 * dy) / slackY, -1, 1) : 0;
+      const { ox, oy } = slidePhoto(photoPlace(cell, photo.w, photo.h, g.start), g.start, dx, dy);
       s.commit((d) => ({ ...d, cells: { ...d.cells, [g.cellId]: { ...d.cells[g.cellId], ox, oy } } }), 'pan:' + g.cellId);
     } else if (g.mode === 'pinch') {
       if (pointers.current.size < 2 || !g.start?.photoId) return;
       const [p1, p2] = [...pointers.current.values()];
       const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
       const zoom = clamp((g.start.zoom * dist) / Math.max(1, g.d0), 1, 6);
-      s.commit((d) => ({ ...d, cells: { ...d.cells, [g.cellId]: { ...d.cells[g.cellId], zoom } } }), 'zoom:' + g.cellId);
+      // twist: the turn of the line between the two fingers since they landed (snaps to straight near 0)
+      let turn = ((Math.atan2(p2.y - p1.y, p2.x - p1.x) - g.a0) * 180) / Math.PI;
+      turn = ((turn + 540) % 360) - 180;
+      let tilt = clamp((g.start.tilt ?? 0) + turn, -TILT_MAX, TILT_MAX);
+      if (Math.abs(tilt) < 1.5) tilt = 0;
+      s.commit((d) => ({ ...d, cells: { ...d.cells, [g.cellId]: { ...d.cells[g.cellId], zoom, tilt } } }), 'zoom:' + g.cellId);
     } else if (g.mode === 'mergeDrag') {
       if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < TAP_SLOP) return;
       if (!g.moved) {
@@ -297,7 +304,9 @@ export default function Frame({
       ref={stageRef}
       onPointerDown={(e) => {
         // tapping the black space around the frame leaves the picked photo
-        if (!mergeMode && e.target === e.currentTarget) useStore.getState().select(null);
+        if (e.target !== e.currentTarget) return;
+        if (!mergeMode) useStore.getState().select(null);
+        if (textMode) useStore.getState().pickText(null);
       }}
     >
       <div className="frame-wrap" style={{ width: W, height: H }}>
@@ -312,7 +321,7 @@ export default function Frame({
         {layout.cells.map((c) => {
           const p = doc.cells[c.id];
           const photo = p?.photoId ? photos[p.photoId] : undefined;
-          const r = photo && p ? photoRect({ x: 0, y: 0, w: c.w, h: c.h }, photo.w, photo.h, p) : null;
+          const at = photo && p ? photoPlace({ x: 0, y: 0, w: c.w, h: c.h }, photo.w, photo.h, p) : null;
           const cls = ['cell', selected === c.id && 'selected', (second === c.id || doomed.includes(c.id)) && 'second', lift?.id === c.id && 'lifted', lift?.over === c.id && 'swap-target']
             .filter(Boolean)
             .join(' ');
@@ -330,16 +339,12 @@ export default function Frame({
                 ...(lift?.id === c.id && { transform: `translate(${lift.dx}px, ${lift.dy}px) scale(1.06)` }),
               }}
             >
-              {photo && r ? (
+              {photo && at ? (
                 <img
                   src={photo.preview}
                   alt=""
                   draggable={false}
-                  style={(() => {
-                    // draw at the photo's own size, then turn it about the centre of its outline
-                    const [w, h] = sideways(p!) ? [r.h, r.w] : [r.w, r.h];
-                    return { left: r.x + (r.w - w) / 2, top: r.y + (r.h - h) / 2, width: w, height: h, transform: `rotate(${p!.rot ?? 0}deg)` };
-                  })()}
+                  style={{ left: at.cx - at.w / 2, top: at.cy - at.h / 2, width: at.w, height: at.h, transform: `rotate(${at.deg}deg)` }}
                 />
               ) : (
                 <div className="empty">
@@ -366,6 +371,7 @@ export default function Frame({
           );
         })}
       </div>
+      <TextLayer W={W} H={H} live={textMode} />
       {/* merge hint: the same orange marks as a real merge — solid on the photo kept, dashed on the ones that go */}
       {hintPair &&
         [hintPair.a, ...hintPair.drop].map((c, i) => (
